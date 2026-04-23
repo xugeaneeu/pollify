@@ -1,0 +1,1334 @@
+openapi: 3.1.0
+info:
+  title: Pollify API
+  version: 0.1.0
+  summary: REST API for poll management, voting, results, reporting, and moderation.
+  description: |
+    Contract-first API for Pollify backend.
+
+    The API supports:
+    - built-in authentication via email/password and Bearer JWT;
+    - authenticated user identity lookup;
+    - poll creation and limited pre-start updates;
+    - single-choice, multiple-choice, and text-only voting;
+    - aggregated poll results for all authenticated users;
+    - detailed voter exposure only for non-anonymous polls and only when requested;
+    - report submission and quorum-based moderation.
+
+    Protected endpoints are processed by JWT authentication middleware that validates the bearer
+    token and injects the current `user_id` and `role` into request context.
+servers:
+  - url: /
+    description: Relative server URL for local and deployed environments.
+tags:
+  - name: Health
+    description: Technical service health endpoints.
+  - name: Auth
+    description: Registration and login endpoints for built-in authentication.
+  - name: Users
+    description: Current authenticated user operations.
+  - name: Polls
+    description: Poll creation, listing, lookup, and update operations.
+  - name: Voting
+    description: Vote submission operations.
+  - name: Results
+    description: Poll result retrieval operations.
+  - name: Reports
+    description: Report submission and report listing operations.
+  - name: Moderation
+    description: Administrative moderation and review operations.
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      tags:
+        - Health
+      summary: Service health check
+      description: Returns liveness/readiness status for deployment environments.
+      operationId: getHealthz
+      security: []
+      responses:
+        '200':
+          description: Service is healthy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /api/v1/auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Register user
+      description: |
+        Creates a new user account using email and password.
+
+        This endpoint is public and is not processed as an already-authenticated route.
+      operationId: registerUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered and authenticated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResponse'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Login user
+      description: |
+        Authenticates a user by email and password and returns a bearer token pair.
+
+        This endpoint is public and is not processed as an already-authenticated route.
+      operationId: loginUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: User authenticated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/users/me:
+    get:
+      tags:
+        - Users
+      summary: Get current user
+      description: Returns the authenticated user extracted from JWT-authenticated context by middleware.
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: Current authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserMeResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /api/v1/polls:
+    get:
+      tags:
+        - Polls
+      summary: List polls
+      description: |
+        Returns a paginated list of polls visible to the authenticated user.
+
+        Hidden polls are not expected to be returned to regular users. Administrators may
+        receive them depending on implementation-specific access rules.
+      operationId: listPolls
+      parameters:
+        - $ref: '#/components/parameters/PollStatusFilter'
+        - $ref: '#/components/parameters/PollCreatorIdFilter'
+        - $ref: '#/components/parameters/PollIsAnonymousFilter'
+        - $ref: '#/components/parameters/PollIsMultipleChoiceFilter'
+        - $ref: '#/components/parameters/PollAllowCustomAnswerFilter'
+        - $ref: '#/components/parameters/PollAvailableForVotingFilter'
+        - $ref: '#/components/parameters/PageParameter'
+        - $ref: '#/components/parameters/LimitParameter'
+        - $ref: '#/components/parameters/PollSortParameter'
+      responses:
+        '200':
+          description: Paginated poll list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PollsListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags:
+        - Polls
+      summary: Create poll
+      description: |
+        Creates a new poll.
+
+        Business constraints:
+        - `title` and `question` are required.
+        - `end_at` must be later than `start_at`.
+        - if `is_multiple_choice=true`, `max_choices` must be at least `2`.
+        - if `allow_custom_answer=true`, `is_multiple_choice` must be `false`.
+        - text-only polls are allowed when `allow_custom_answer=true` and `options` is empty.
+        - mixed mode (`options` plus free-text voting in the same poll) is intentionally excluded
+          from the initial version.
+      operationId: createPoll
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePollRequest'
+      responses:
+        '201':
+          description: Poll created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PollDetails'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/polls/{pollId}:
+    get:
+      tags:
+        - Polls
+      summary: Get poll details
+      description: Returns a single poll card by identifier.
+      operationId: getPoll
+      parameters:
+        - $ref: '#/components/parameters/PollIdPath'
+      responses:
+        '200':
+          description: Poll details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PollDetails'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    patch:
+      tags:
+        - Polls
+      summary: Update poll before start
+      description: |
+        Updates the limited mutable subset of poll fields.
+
+        Only the creator may update the poll, and only before voting has started and before any
+        participation has been recorded.
+      operationId: updatePoll
+      parameters:
+        - $ref: '#/components/parameters/PollIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePollRequest'
+      responses:
+        '200':
+          description: Poll updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PollDetails'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/polls/{pollId}/votes:
+    post:
+      tags:
+        - Voting
+      summary: Submit vote
+      description: |
+        Creates a vote for the authenticated user.
+
+        Request body is mutually exclusive:
+        - either `option_ids[]`;
+        - or `custom_text`.
+
+        Business constraints:
+        - one user may participate only once in a poll;
+        - hidden, not-yet-started, or completed polls do not accept votes;
+        - single-choice polls require exactly one option id;
+        - multiple-choice polls require `option_ids.length <= max_choices`;
+        - `custom_text` is allowed only for text-enabled polls;
+        - both `option_ids` and `custom_text` cannot be sent together.
+      operationId: createVote
+      parameters:
+        - $ref: '#/components/parameters/PollIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVoteRequest'
+      responses:
+        '201':
+          description: Vote accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteAcceptedResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/polls/{pollId}/results:
+    get:
+      tags:
+        - Results
+      summary: Get poll results
+      description: |
+        Returns aggregated poll results.
+
+        Aggregated results are available to all authenticated users.
+        Query parameter `include_voters=true` may be used only for non-anonymous polls.
+        For anonymous polls, the application must not expose or derive any user-to-vote linkage
+        through this endpoint.
+      operationId: getPollResults
+      parameters:
+        - $ref: '#/components/parameters/PollIdPath'
+        - $ref: '#/components/parameters/IncludeVotersParameter'
+      responses:
+        '200':
+          description: Poll results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PollResultsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/polls/{pollId}/reports:
+    post:
+      tags:
+        - Reports
+      summary: Create report for poll
+      description: |
+        Submits a report against an existing poll.
+
+        A user may have at most one active report for the same poll.
+      operationId: createPollReport
+      parameters:
+        - $ref: '#/components/parameters/PollIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportRequest'
+      responses:
+        '201':
+          description: Report created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    get:
+      tags:
+        - Moderation
+      summary: List reports for poll
+      description: Returns all reports for a poll. Available only to administrators.
+      operationId: listPollReports
+      parameters:
+        - $ref: '#/components/parameters/PollIdPath'
+        - $ref: '#/components/parameters/PageParameter'
+        - $ref: '#/components/parameters/LimitParameter'
+      responses:
+        '200':
+          description: Paginated report list for poll.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportsListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/reports:
+    get:
+      tags:
+        - Moderation
+      summary: List reports
+      description: Returns a paginated report list with moderation-oriented filters. Available only to administrators.
+      operationId: listReports
+      parameters:
+        - $ref: '#/components/parameters/ReportStatusFilter'
+        - $ref: '#/components/parameters/ReportPollIdFilter'
+        - $ref: '#/components/parameters/ReportCreatedByFilter'
+        - $ref: '#/components/parameters/PageParameter'
+        - $ref: '#/components/parameters/LimitParameter'
+        - $ref: '#/components/parameters/ReportSortParameter'
+      responses:
+        '200':
+          description: Paginated report list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportsListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/reports/{reportId}:
+    get:
+      tags:
+        - Moderation
+      summary: Get report details
+      description: Returns report details including review state. Available only to administrators.
+      operationId: getReport
+      parameters:
+        - $ref: '#/components/parameters/ReportIdPath'
+      responses:
+        '200':
+          description: Report details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /api/v1/reports/{reportId}/reviews:
+    post:
+      tags:
+        - Moderation
+      summary: Submit moderation review
+      description: |
+        Creates an administrator review for a report.
+
+        Business constraints:
+        - only administrators may call this endpoint;
+        - an administrator cannot review their own report;
+        - one administrator may submit only one review per report;
+        - once quorum is reached, further reviews are rejected;
+        - quorum for the initial version is two matching decisions.
+      operationId: createReportReview
+      parameters:
+        - $ref: '#/components/parameters/ReportIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportReviewRequest'
+      responses:
+        '201':
+          description: Review created and report state refreshed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportReviewResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT bearer token validated by authentication middleware for protected routes.
+  parameters:
+    PollIdPath:
+      name: pollId
+      in: path
+      required: true
+      description: Poll identifier.
+      schema:
+        type: string
+        format: uuid
+    ReportIdPath:
+      name: reportId
+      in: path
+      required: true
+      description: Report identifier.
+      schema:
+        type: string
+        format: uuid
+    PageParameter:
+      name: page
+      in: query
+      required: false
+      description: 1-based page number.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    LimitParameter:
+      name: limit
+      in: query
+      required: false
+      description: Page size.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    PollStatusFilter:
+      name: status
+      in: query
+      required: false
+      description: Filter by computed public poll status.
+      schema:
+        $ref: '#/components/schemas/PollStatus'
+    PollCreatorIdFilter:
+      name: creator_id
+      in: query
+      required: false
+      description: Filter by poll creator identifier.
+      schema:
+        type: string
+        format: uuid
+    PollIsAnonymousFilter:
+      name: is_anonymous
+      in: query
+      required: false
+      description: Filter by anonymous poll flag.
+      schema:
+        type: boolean
+    PollIsMultipleChoiceFilter:
+      name: is_multiple_choice
+      in: query
+      required: false
+      description: Filter by multiple-choice flag.
+      schema:
+        type: boolean
+    PollAllowCustomAnswerFilter:
+      name: allow_custom_answer
+      in: query
+      required: false
+      description: Filter by text-answer support flag.
+      schema:
+        type: boolean
+    PollAvailableForVotingFilter:
+      name: available_for_voting
+      in: query
+      required: false
+      description: Filter by current vote availability for the authenticated user.
+      schema:
+        type: boolean
+    PollSortParameter:
+      name: sort
+      in: query
+      required: false
+      description: Sorting expression for poll list.
+      schema:
+        type: string
+        enum:
+          - created_at
+          - -created_at
+          - start_at
+          - -start_at
+          - end_at
+          - -end_at
+    IncludeVotersParameter:
+      name: include_voters
+      in: query
+      required: false
+      description: Include voter details for non-anonymous polls only.
+      schema:
+        type: boolean
+        default: false
+    ReportStatusFilter:
+      name: status
+      in: query
+      required: false
+      description: Filter by report status.
+      schema:
+        $ref: '#/components/schemas/ReportStatus'
+    ReportPollIdFilter:
+      name: poll_id
+      in: query
+      required: false
+      description: Filter by poll identifier.
+      schema:
+        type: string
+        format: uuid
+    ReportCreatedByFilter:
+      name: created_by
+      in: query
+      required: false
+      description: Filter by report author.
+      schema:
+        type: string
+        format: uuid
+    ReportSortParameter:
+      name: sort
+      in: query
+      required: false
+      description: Sorting expression for report list.
+      schema:
+        type: string
+        enum:
+          - created_at
+          - -created_at
+          - status
+          - -status
+  responses:
+    UnauthorizedError:
+      description: Authentication is missing or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            unauthorized:
+              value:
+                error:
+                  code: unauthorized
+                  message: authentication is required
+                  details: {}
+    ForbiddenError:
+      description: The authenticated user does not have access to the requested action.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            forbidden:
+              value:
+                error:
+                  code: forbidden
+                  message: access denied
+                  details: {}
+    NotFoundError:
+      description: The requested resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            notFound:
+              value:
+                error:
+                  code: not_found
+                  message: resource not found
+                  details: {}
+    ValidationError:
+      description: Request payload or query parameters violate validation rules.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            validation:
+              value:
+                error:
+                  code: validation_error
+                  message: request validation failed
+                  details:
+                    field: title
+    ConflictError:
+      description: The requested action conflicts with current resource state.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            alreadyVoted:
+              value:
+                error:
+                  code: poll_already_voted
+                  message: user has already participated in this poll
+                  details: {}
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+    UserRole:
+      type: string
+      enum:
+        - USER
+        - ADMIN
+    PollStatus:
+      type: string
+      description: Computed poll lifecycle status exposed by the API.
+      enum:
+        - scheduled
+        - active
+        - completed
+        - hidden
+    ReportStatus:
+      type: string
+      enum:
+        - OPEN
+        - IN_REVIEW
+        - RESOLVED
+        - REJECTED
+    ReportDecision:
+      type: string
+      enum:
+        - APPROVE
+        - REJECT
+    PaginationMeta:
+      type: object
+      additionalProperties: false
+      required:
+        - page
+        - limit
+        - total_items
+        - total_pages
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        limit:
+          type: integer
+          minimum: 1
+        total_items:
+          type: integer
+          minimum: 0
+        total_pages:
+          type: integer
+          minimum: 0
+    ErrorDetail:
+      type: object
+      additionalProperties: true
+    ErrorBody:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+        - details
+      properties:
+        code:
+          type: string
+          description: |
+            Machine-readable error code.
+
+            Expected values include `validation_error`, `unauthorized`, `forbidden`, `not_found`,
+            `poll_not_active`, `poll_hidden`, `poll_already_voted`, `poll_vote_payload_invalid`,
+            `poll_update_not_allowed`, `report_already_exists`, `report_review_self_forbidden`,
+            `report_review_already_exists`, `report_already_resolved`, `quorum_not_reached`, and
+            `internal_error`.
+        message:
+          type: string
+        details:
+          $ref: '#/components/schemas/ErrorDetail'
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorBody'
+    AuthTokens:
+      type: object
+      additionalProperties: false
+      required:
+        - access_token
+        - refresh_token
+        - token_type
+        - expires_in
+      properties:
+        access_token:
+          type: string
+          minLength: 1
+        refresh_token:
+          type: string
+          minLength: 1
+        token_type:
+          type: string
+          const: Bearer
+        expires_in:
+          type: integer
+          minimum: 1
+          description: Access token lifetime in seconds.
+    UserSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - role
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_name:
+          type:
+            - string
+            - 'null'
+        email:
+          type:
+            - string
+            - 'null'
+          format: email
+        role:
+          $ref: '#/components/schemas/UserRole'
+        created_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+    UserMeResponse:
+      allOf:
+        - $ref: '#/components/schemas/UserSummary'
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 320
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Plain-text password that will be hashed by the application.
+        display_name:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+          maxLength: 255
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 320
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+    AuthSessionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - user
+        - tokens
+      properties:
+        user:
+          $ref: '#/components/schemas/UserSummary'
+        tokens:
+          $ref: '#/components/schemas/AuthTokens'
+    PollOption:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - text
+      properties:
+        id:
+          type: string
+          format: uuid
+        text:
+          type: string
+          minLength: 1
+          maxLength: 500
+    PollSettings:
+      type: object
+      additionalProperties: false
+      required:
+        - is_anonymous
+        - is_multiple_choice
+        - allow_custom_answer
+        - start_at
+        - end_at
+      properties:
+        is_anonymous:
+          type: boolean
+        is_multiple_choice:
+          type: boolean
+        max_choices:
+          type:
+            - integer
+            - 'null'
+          minimum: 2
+          description: Required when `is_multiple_choice=true`; otherwise omitted or null.
+        allow_custom_answer:
+          type: boolean
+          description: When true, the initial API version expects a text-only poll shape.
+        start_at:
+          type: string
+          format: date-time
+        end_at:
+          type: string
+          format: date-time
+    PollParticipationSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - participants_count
+        - has_voted
+      properties:
+        participants_count:
+          type: integer
+          minimum: 0
+        has_voted:
+          type: boolean
+    PollSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - title
+        - question
+        - status
+        - is_anonymous
+        - is_multiple_choice
+        - allow_custom_answer
+        - is_hidden
+        - created_by
+        - start_at
+        - end_at
+        - created_at
+        - participation_summary
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type:
+            - string
+            - 'null'
+        question:
+          type: string
+        status:
+          $ref: '#/components/schemas/PollStatus'
+        is_anonymous:
+          type: boolean
+        is_multiple_choice:
+          type: boolean
+        max_choices:
+          type:
+            - integer
+            - 'null'
+          minimum: 2
+        allow_custom_answer:
+          type: boolean
+        start_at:
+          type: string
+          format: date-time
+        end_at:
+          type: string
+          format: date-time
+        is_hidden:
+          type: boolean
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        participation_summary:
+          $ref: '#/components/schemas/PollParticipationSummary'
+    PollDetails:
+      allOf:
+        - $ref: '#/components/schemas/PollSummary'
+        - type: object
+          additionalProperties: false
+          required:
+            - options
+            - settings
+          properties:
+            options:
+              type: array
+              items:
+                $ref: '#/components/schemas/PollOption'
+            settings:
+              $ref: '#/components/schemas/PollSettings'
+    CreatePollOption:
+      type: object
+      additionalProperties: false
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 500
+    CreatePollRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - title
+        - question
+        - settings
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type:
+            - string
+            - 'null'
+          maxLength: 5000
+        question:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        options:
+          type: array
+          description: |
+            Required for option-based polls.
+
+            For the initial version, omit or send an empty array for text-only polls. Mixed mode is
+            intentionally not supported even though it can be represented structurally.
+          items:
+            $ref: '#/components/schemas/CreatePollOption'
+        settings:
+          $ref: '#/components/schemas/PollSettings'
+    UpdatePollRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type:
+            - string
+            - 'null'
+          maxLength: 5000
+        start_at:
+          type: string
+          format: date-time
+        end_at:
+          type: string
+          format: date-time
+      description: Only these fields are mutable in the initial version.
+    CreateOptionVoteRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - option_ids
+      properties:
+        option_ids:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+      description: |
+        For single-choice polls send exactly one option id.
+        For multiple-choice polls the application validates `option_ids.length <= max_choices`.
+    CreateTextVoteRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - custom_text
+      properties:
+        custom_text:
+          type: string
+          minLength: 1
+          maxLength: 5000
+      description: Allowed only when the poll is configured with `allow_custom_answer=true`.
+    CreateVoteRequest:
+      oneOf:
+        - $ref: '#/components/schemas/CreateOptionVoteRequest'
+        - $ref: '#/components/schemas/CreateTextVoteRequest'
+      description: |
+        Logical one-of vote payload.
+
+        The backend should treat this as mutually exclusive input even though payload shape alone,
+        without a dedicated discriminator field, is expected to drive validation.
+    VoteAcceptedResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - poll_id
+        - participation_recorded
+      properties:
+        poll_id:
+          type: string
+          format: uuid
+        participation_recorded:
+          type: boolean
+          const: true
+    PollOptionResult:
+      type: object
+      additionalProperties: false
+      required:
+        - option_id
+        - label
+        - votes_count
+        - percentage
+      properties:
+        option_id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        votes_count:
+          type: integer
+          minimum: 0
+        percentage:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+    PollTextAnswer:
+      type: object
+      additionalProperties: false
+      required:
+        - value
+        - count
+      properties:
+        value:
+          type: string
+        count:
+          type: integer
+          minimum: 1
+    PollVoterDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - user_id
+        - selected_option_ids
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        display_name:
+          type:
+            - string
+            - 'null'
+        selected_option_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        custom_text:
+          type:
+            - string
+            - 'null'
+      description: Available only for non-anonymous polls when `include_voters=true`.
+    PollResultsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - poll_id
+        - status
+        - participants_count
+        - total_votes_count
+        - options
+        - custom_answers
+      properties:
+        poll_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/PollStatus'
+        participants_count:
+          type: integer
+          minimum: 0
+        total_votes_count:
+          type: integer
+          minimum: 0
+          description: Total atomic votes stored for the poll.
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/PollOptionResult'
+        custom_answers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PollTextAnswer'
+        voter_details:
+          type: array
+          items:
+            $ref: '#/components/schemas/PollVoterDetail'
+          description: Returned only for non-anonymous polls when explicitly requested.
+    CreateReportRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        comment:
+          type:
+            - string
+            - 'null'
+          maxLength: 5000
+    ReportReview:
+      type: object
+      additionalProperties: false
+      required:
+        - admin_id
+        - decision
+        - created_at
+      properties:
+        admin_id:
+          type: string
+          format: uuid
+        decision:
+          $ref: '#/components/schemas/ReportDecision'
+        comment:
+          type:
+            - string
+            - 'null'
+        created_at:
+          type: string
+          format: date-time
+    ReportResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - poll_id
+        - created_by
+        - reason
+        - status
+        - created_at
+        - approval_count
+        - rejection_count
+        - reviews
+      properties:
+        id:
+          type: string
+          format: uuid
+        poll_id:
+          type: string
+          format: uuid
+        created_by:
+          type: string
+          format: uuid
+        reason:
+          type: string
+        comment:
+          type:
+            - string
+            - 'null'
+        status:
+          $ref: '#/components/schemas/ReportStatus'
+        created_at:
+          type: string
+          format: date-time
+        approval_count:
+          type: integer
+          minimum: 0
+        rejection_count:
+          type: integer
+          minimum: 0
+        resolution:
+          type:
+            - string
+            - 'null'
+          description: Final resolution summary when quorum is reached.
+        reviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportReview'
+    CreateReportReviewRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - decision
+      properties:
+        decision:
+          $ref: '#/components/schemas/ReportDecision'
+        comment:
+          type:
+            - string
+            - 'null'
+          maxLength: 5000
+    ReportReviewResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - review
+        - report
+      properties:
+        review:
+          $ref: '#/components/schemas/ReportReview'
+        report:
+          $ref: '#/components/schemas/ReportResponse'
+    ReportsListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - meta
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportResponse'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    PollsListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - meta
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PollSummary'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
