@@ -1,0 +1,9 @@
+.git
+.gitignore
+.kilo
+frontend
+**/.DS_Store
+**/node_modules
+**/bin
+**/.idea
+**/.vscode

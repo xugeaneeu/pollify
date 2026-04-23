@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: pollify
+      POSTGRES_USER: pollify
+      POSTGRES_PASSWORD: pollify
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pollify -d pollify"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HTTP_ADDRESS: ":8080"
+      DATABASE_URL: postgres://pollify:pollify@postgres:5432/pollify?sslmode=disable
+      JWT_SECRET: dev-secret
+      OPENAPI_PATH: ../api/openapi.yaml
+      MIGRATIONS_PATH: migrations
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres-data:
