@@ -63,6 +63,10 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	return server.Run(ctx)
 }
 
+func BuildHandler(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool) (http.Handler, error) {
+	return buildHandler(cfg, logger, pool)
+}
+
 func buildHandler(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool) (http.Handler, error) {
 	systemClock := clock.SystemClock{}
 	hasher := auth.NewBcryptHasher(0)
