@@ -29,6 +29,10 @@ import (
 	votinghttp "xugeaneeu/pollify/internal/voting/adapters/http"
 	votingrepo "xugeaneeu/pollify/internal/voting/adapters/postgres"
 	voting "xugeaneeu/pollify/internal/voting/core"
+
+	moderationhttp "xugeaneeu/pollify/internal/moderation/adapters/http"
+	moderationrepo "xugeaneeu/pollify/internal/moderation/adapters/postgres"
+	moderation "xugeaneeu/pollify/internal/moderation/core"
 )
 
 var ErrDatabaseURLRequired = errors.New("app: DATABASE_URL is required")
@@ -86,6 +90,13 @@ func buildHandler(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool) (h
 	}
 	voteHandler := votinghttp.NewHandler(voteService)
 
+	moderationRepo := moderationrepo.NewRepository(pool)
+	moderationService, err := moderation.NewService(moderationRepo, pollRepo, pollRepo, systemClock, moderation.DefaultQuorum)
+	if err != nil {
+		return nil, err
+	}
+	moderationHandler := moderationhttp.NewHandler(moderationService, moderationRepo)
+
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -103,6 +114,14 @@ func buildHandler(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool) (h
 			protected.Route("/polls", func(p chi.Router) {
 				pollHandler.RegisterRoutes(p)
 				voteHandler.RegisterRoutes(p)
+				p.Post("/{pollId}/reports", moderationHandler.CreateReport)
+				p.With(auth.RequireRole(users.RoleAdmin)).Get("/{pollId}/reports", moderationHandler.ListReportsByPoll)
+			})
+			protected.Route("/reports", func(rep chi.Router) {
+				rep.Use(auth.RequireRole(users.RoleAdmin))
+				rep.Get("/", moderationHandler.ListReports)
+				rep.Get("/{reportId}", moderationHandler.GetReport)
+				rep.Post("/{reportId}/reviews", moderationHandler.SubmitReview)
 			})
 		})
 	})

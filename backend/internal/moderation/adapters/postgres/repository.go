@@ -123,6 +123,31 @@ func (r *Repository) List(ctx context.Context, filter moderation.ListFilter) ([]
 	return items, nil
 }
 
+func (r *Repository) Count(ctx context.Context, filter moderation.ListFilter) (int, error) {
+	args := []any{}
+	query := strings.Builder{}
+	query.WriteString(`SELECT COUNT(*) FROM reports WHERE 1=1`)
+
+	if filter.Status != nil {
+		args = append(args, string(*filter.Status))
+		query.WriteString(` AND status = $` + strconv.Itoa(len(args)))
+	}
+	if filter.PollID != "" {
+		args = append(args, strings.TrimSpace(filter.PollID))
+		query.WriteString(` AND poll_id = $` + strconv.Itoa(len(args)))
+	}
+	if filter.CreatedBy != "" {
+		args = append(args, strings.TrimSpace(filter.CreatedBy))
+		query.WriteString(` AND created_by = $` + strconv.Itoa(len(args)))
+	}
+
+	var count int
+	if err := r.db.QueryRow(ctx, query.String(), args...).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (r *Repository) HasActiveReport(ctx context.Context, pollID string, userID string) (bool, error) {
 	var exists bool
 	err := r.db.QueryRow(ctx, `
