@@ -2,13 +2,11 @@ package httpserver
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"time"
 
-	"xugeaneeu/pollify/internal/platform/auth"
 	"xugeaneeu/pollify/internal/platform/config"
 )
 
@@ -17,18 +15,7 @@ type Server struct {
 	logger     *slog.Logger
 }
 
-func newHandler(verifier auth.TokenVerifier) http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	})
-	mux.Handle("/api/v1/", auth.Middleware(verifier)(http.NotFoundHandler()))
-
-	return mux
-}
-
-func New(cfg config.Config, logger *slog.Logger, verifier auth.TokenVerifier) *Server {
+func New(cfg config.Config, logger *slog.Logger, handler http.Handler) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -36,7 +23,7 @@ func New(cfg config.Config, logger *slog.Logger, verifier auth.TokenVerifier) *S
 	return &Server{
 		httpServer: &http.Server{
 			Addr:              cfg.HTTPAddress,
-			Handler:           newHandler(verifier),
+			Handler:           handler,
 			ReadHeaderTimeout: 5 * time.Second,
 		},
 		logger: logger,
