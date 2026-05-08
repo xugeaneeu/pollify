@@ -1,122 +1,114 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { Navigate, NavLink, Outlet, Route, Routes, useNavigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './auth/AuthContext'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+import PollListPage from './pages/PollListPage'
+import CreatePollPage from './pages/CreatePollPage'
+import PollDetailPage from './pages/PollDetailPage'
+import PollResultsPage from './pages/PollResultsPage'
+import ModerationQueuePage from './pages/ModerationQueuePage'
+import ReportDetailPage from './pages/ReportDetailPage'
 
-function App() {
-  const [count, setCount] = useState(0)
+function userInitial(label: string | null | undefined, fallback: string): string {
+  const v = (label ?? '').trim() || fallback
+  return v.charAt(0).toUpperCase()
+}
 
+function Shell() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="app-shell">
+      <header className="topbar">
+        <div className="brand">
+          <span className="dot" />
+          Pollify
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
+        <nav>
+          <NavLink to="/polls" className={({ isActive }) => (isActive ? 'active' : '')}>
+            Polls
+          </NavLink>
+          <NavLink to="/polls/new" className={({ isActive }) => (isActive ? 'active' : '')}>
+            New poll
+          </NavLink>
+          {user?.role === 'ADMIN' && (
+            <NavLink to="/moderation" className={({ isActive }) => (isActive ? 'active' : '')}>
+              Moderation
+            </NavLink>
+          )}
+        </nav>
+        <div className="user-chip">
+          {user ? (
+            <>
+              <span className="name">
+                <span className="avatar">{userInitial(user.display_name || user.email, user.id)}</span>
+                {user.display_name || user.email || user.id}
+                <span className="tag role">{user.role}</span>
+              </span>
+              <button
+                className="btn ghost"
+                onClick={() => {
+                  logout()
+                  navigate('/login')
+                }}
+              >
+                Sign out
+              </button>
+            </>
+          ) : null}
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      </header>
+      <main>
+        <Outlet />
+      </main>
+    </div>
   )
 }
 
-export default App
+function RequireAuth() {
+  const { user, loading } = useAuth()
+  if (loading)
+    return (
+      <p className="muted" style={{ padding: '2rem 1.5rem' }}>
+        <span className="spinner" /> Loading…
+      </p>
+    )
+  if (!user) return <Navigate to="/login" replace />
+  return <Shell />
+}
+
+function RequireAdmin() {
+  const { user, loading } = useAuth()
+  if (loading)
+    return (
+      <p className="muted">
+        <span className="spinner" /> Loading…
+      </p>
+    )
+  if (!user) return <Navigate to="/login" replace />
+  if (user.role !== 'ADMIN') return <Navigate to="/polls" replace />
+  return <Outlet />
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route element={<RequireAuth />}>
+          <Route index element={<Navigate to="/polls" replace />} />
+          <Route path="/polls" element={<PollListPage />} />
+          <Route path="/polls/new" element={<CreatePollPage />} />
+          <Route path="/polls/:pollId" element={<PollDetailPage />} />
+          <Route path="/polls/:pollId/results" element={<PollResultsPage />} />
+          <Route element={<RequireAdmin />}>
+            <Route path="/moderation" element={<ModerationQueuePage />} />
+            <Route path="/reports/:reportId" element={<ReportDetailPage />} />
+          </Route>
+        </Route>
+        <Route path="*" element={<Navigate to="/polls" replace />} />
+      </Routes>
+    </AuthProvider>
+  )
+}
