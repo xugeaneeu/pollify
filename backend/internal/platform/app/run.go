@@ -18,9 +18,17 @@ import (
 	"xugeaneeu/pollify/internal/platform/httpserver"
 	platformpg "xugeaneeu/pollify/internal/platform/postgres"
 
+	pollshttp "xugeaneeu/pollify/internal/polls/adapters/http"
+	pollsrepo "xugeaneeu/pollify/internal/polls/adapters/postgres"
+	polls "xugeaneeu/pollify/internal/polls/core"
+
 	usershttp "xugeaneeu/pollify/internal/users/adapters/http"
 	usersrepo "xugeaneeu/pollify/internal/users/adapters/postgres"
 	users "xugeaneeu/pollify/internal/users/core"
+
+	votinghttp "xugeaneeu/pollify/internal/voting/adapters/http"
+	votingrepo "xugeaneeu/pollify/internal/voting/adapters/postgres"
+	voting "xugeaneeu/pollify/internal/voting/core"
 )
 
 var ErrDatabaseURLRequired = errors.New("app: DATABASE_URL is required")
@@ -64,6 +72,20 @@ func buildHandler(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool) (h
 	}
 	userHandler := usershttp.NewHandler(userService)
 
+	pollRepo := pollsrepo.NewRepository(pool)
+	pollService, err := polls.NewService(pollRepo, pollRepo, systemClock)
+	if err != nil {
+		return nil, err
+	}
+	pollHandler := pollshttp.NewHandler(pollService, pollStatsAdapter{repo: pollRepo}, pollRepo, systemClock)
+
+	voteRepo := votingrepo.NewRepository(pool)
+	voteService, err := voting.NewService(pollRepo, voteRepo, systemClock)
+	if err != nil {
+		return nil, err
+	}
+	voteHandler := votinghttp.NewHandler(voteService)
+
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -78,10 +100,26 @@ func buildHandler(cfg config.Config, logger *slog.Logger, pool *pgxpool.Pool) (h
 		r.Group(func(protected chi.Router) {
 			protected.Use(auth.Middleware(verifier))
 			protected.Mount("/users", userHandler.ProtectedRoutes())
+			protected.Route("/polls", func(p chi.Router) {
+				pollHandler.RegisterRoutes(p)
+				voteHandler.RegisterRoutes(p)
+			})
 		})
 	})
 
 	return r, nil
+}
+
+type pollStatsAdapter struct {
+	repo *pollsrepo.Repository
+}
+
+func (a pollStatsAdapter) Count(ctx context.Context, pollID string) (int, error) {
+	return a.repo.ParticipationCount(ctx, pollID)
+}
+
+func (a pollStatsAdapter) HasVoted(ctx context.Context, pollID, userID string) (bool, error) {
+	return a.repo.HasUserVoted(ctx, pollID, userID)
 }
 
 func healthzHandler(w http.ResponseWriter, _ *http.Request) {

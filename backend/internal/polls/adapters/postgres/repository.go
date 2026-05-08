@@ -224,6 +224,68 @@ func (r *Repository) HasParticipants(ctx context.Context, pollID string) (bool, 
 	return exists, err
 }
 
+func (r *Repository) ParticipationCount(ctx context.Context, pollID string) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*) FROM poll_participants WHERE poll_id = $1
+	`, strings.TrimSpace(pollID)).Scan(&count)
+	return count, err
+}
+
+func (r *Repository) HasUserVoted(ctx context.Context, pollID string, userID string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM poll_participants WHERE poll_id = $1 AND user_id = $2
+		)
+	`, strings.TrimSpace(pollID), strings.TrimSpace(userID)).Scan(&exists)
+	return exists, err
+}
+
+func (r *Repository) Count(ctx context.Context, filter polls.ListFilter) (int, error) {
+	args := []any{}
+	query := strings.Builder{}
+	query.WriteString(`SELECT COUNT(*) FROM polls WHERE 1=1`)
+
+	if filter.Status != nil {
+		switch *filter.Status {
+		case polls.StatusHidden:
+			query.WriteString(` AND is_hidden = TRUE`)
+		case polls.StatusScheduled:
+			query.WriteString(` AND is_hidden = FALSE AND start_at > CURRENT_TIMESTAMP`)
+		case polls.StatusActive:
+			query.WriteString(` AND is_hidden = FALSE AND start_at <= CURRENT_TIMESTAMP AND end_at > CURRENT_TIMESTAMP`)
+		case polls.StatusCompleted:
+			query.WriteString(` AND is_hidden = FALSE AND end_at <= CURRENT_TIMESTAMP`)
+		}
+	}
+	if filter.CreatorID != "" {
+		args = append(args, filter.CreatorID)
+		query.WriteString(` AND created_by = $` + ordinal(len(args)))
+	}
+	if filter.IsAnonymous != nil {
+		args = append(args, *filter.IsAnonymous)
+		query.WriteString(` AND is_anonymous = $` + ordinal(len(args)))
+	}
+	if filter.IsMultipleChoice != nil {
+		args = append(args, *filter.IsMultipleChoice)
+		query.WriteString(` AND is_multiple_choice = $` + ordinal(len(args)))
+	}
+	if filter.AllowCustomAnswer != nil {
+		args = append(args, *filter.AllowCustomAnswer)
+		query.WriteString(` AND allow_custom_answer = $` + ordinal(len(args)))
+	}
+	if filter.AvailableForVoting != nil && *filter.AvailableForVoting {
+		query.WriteString(` AND is_hidden = FALSE AND start_at <= CURRENT_TIMESTAMP AND end_at > CURRENT_TIMESTAMP`)
+	}
+
+	var count int
+	if err := r.db.QueryRow(ctx, query.String(), args...).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 type queryRower interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
