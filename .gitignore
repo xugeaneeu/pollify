@@ -1,1 +1,22 @@
+# Workspace
 .kilo
+
+# Go build artifacts
+bin/
+*.exe
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
