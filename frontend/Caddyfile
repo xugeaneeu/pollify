@@ -1,0 +1,27 @@
+# Caddy config for production. Serves the built SPA at /, reverse-proxies
+# /api/* and /healthz to the api container, and falls back to index.html
+# for client-side routes (BrowserRouter).
+#
+# {$SITE_ADDRESS} resolves from the SITE_ADDRESS env var. Defaults to :80
+# (plain HTTP). Set to your domain (e.g. example.com) and Caddy will
+# obtain a Let's Encrypt cert automatically.
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	@api path /api/* /healthz
+	handle @api {
+		reverse_proxy api:8080
+	}
+
+	handle {
+		root * /usr/share/caddy
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

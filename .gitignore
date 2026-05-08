@@ -9,7 +9,7 @@ bin/
 coverage.out
 coverage.html
 
-# Environment
+# Environment (real .env stays out of git; .env.example is tracked)
 .env
 .env.*
 !.env.example

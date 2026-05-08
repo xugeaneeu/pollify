@@ -1,9 +1,16 @@
 .git
 .gitignore
 .kilo
-frontend
+.env
+.env.*
+!.env.example
 **/.DS_Store
 **/node_modules
 **/bin
+**/dist
 **/.idea
 **/.vscode
+**/test-results
+**/playwright-report
+frontend/playwright.config.ts
+frontend/tests

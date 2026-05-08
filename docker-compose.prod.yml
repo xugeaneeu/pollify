@@ -1,0 +1,57 @@
+# Production stack for Pollify on a single Docker host.
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Requires a .env file alongside this one with at least POSTGRES_PASSWORD
+# and JWT_SECRET set. See .env.example.
+#
+# postgres and api stay on the internal compose network — only the web
+# service publishes a port (80). To put TLS in front, set SITE_ADDRESS
+# to your domain in .env and add a `- "443:443"` entry to web.ports.
+
+name: pollify-prod
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pollify}
+      POSTGRES_USER: ${POSTGRES_USER:-pollify}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pollify} -d ${POSTGRES_DB:-pollify}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HTTP_ADDRESS: ":8080"
+      DATABASE_URL: postgres://${POSTGRES_USER:-pollify}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-pollify}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      MIGRATIONS_PATH: migrations
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      - api
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "80:80"
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
