@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/client'
+import { useT } from '../i18n/LocaleContext'
 import { ApiError, type PollDetails, type PollResults } from '../api/types'
 
 export default function PollResultsPage() {
   const { pollId = '' } = useParams<{ pollId: string }>()
+  const { t, tn } = useT()
   const [poll, setPoll] = useState<PollDetails | null>(null)
   const [results, setResults] = useState<PollResults | null>(null)
   const [includeVoters, setIncludeVoters] = useState(false)
@@ -18,14 +20,14 @@ export default function PollResultsPage() {
         setPoll(pollData)
         setResults(resultsData)
       })
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'Failed to load results'))
+      .catch((err) => setError(err instanceof ApiError ? err.message : t('results.failed')))
       .finally(() => setLoading(false))
-  }, [pollId, includeVoters])
+  }, [pollId, includeVoters, t])
 
   if (loading)
     return (
       <p className="muted">
-        <span className="spinner" /> Loading results…
+        <span className="spinner" /> {t('results.loading')}
       </p>
     )
   if (error) return <div className="error">{error}</div>
@@ -34,33 +36,27 @@ export default function PollResultsPage() {
   return (
     <section>
       <Link to={`/polls/${pollId}`} className="back-link">
-        ← Back to poll
+        {t('results.back')}
       </Link>
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
           <div>
             <h2 style={{ margin: 0 }}>{poll.title}</h2>
             <div style={{ marginTop: '0.5rem' }}>
-              <span className={`tag ${results.status}`}>{results.status}</span>
-              {poll.is_anonymous && <span className="tag">anonymous</span>}
+              <span className={`tag ${results.status}`}>{t(`status.${results.status}`)}</span>
+              {poll.is_anonymous && <span className="tag">{t('poll_detail.tag_anonymous')}</span>}
             </div>
           </div>
         </div>
 
         <div className="stat-row">
-          <span>
-            <strong>{results.participants_count}</strong>{' '}
-            {results.participants_count === 1 ? 'participant' : 'participants'}
-          </span>
-          <span>
-            <strong>{results.total_votes_count}</strong>{' '}
-            {results.total_votes_count === 1 ? 'vote' : 'votes'}
-          </span>
+          <span>{tn('pluralize.participant', results.participants_count)}</span>
+          <span>{tn('pluralize.vote', results.total_votes_count)}</span>
         </div>
 
         {results.options.length > 0 && (
           <div>
-            <h3>Options</h3>
+            <h3>{t('results.options_heading')}</h3>
             {results.options.map((opt) => (
               <div key={opt.option_id} className="option-row">
                 <div style={{ flex: 1 }}>
@@ -80,7 +76,7 @@ export default function PollResultsPage() {
 
         {results.custom_answers.length > 0 && (
           <div>
-            <h3>Free-text answers</h3>
+            <h3>{t('results.free_text_heading')}</h3>
             {results.custom_answers.map((a) => (
               <div key={a.value} className="option-row">
                 <span>{a.value}</span>
@@ -99,11 +95,11 @@ export default function PollResultsPage() {
                 checked={includeVoters}
                 onChange={(e) => setIncludeVoters(e.target.checked)}
               />
-              <label htmlFor="include">Show who voted</label>
+              <label htmlFor="include">{t('results.show_voters')}</label>
             </div>
             {includeVoters && results.voter_details && results.voter_details.length > 0 && (
               <div>
-                <h3>Voters</h3>
+                <h3>{t('results.voters_heading')}</h3>
                 {results.voter_details.map((v) => (
                   <div key={v.user_id} className="option-row">
                     <span style={{ fontWeight: 500 }}>{v.display_name || v.user_id}</span>

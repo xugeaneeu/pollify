@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { useT } from '../i18n/LocaleContext'
 import { ApiError } from '../api/types'
 
 export default function RegisterPage() {
   const { user, register } = useAuth()
+  const { t } = useT()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -22,7 +24,7 @@ export default function RegisterPage() {
       await register(email, password, displayName || undefined)
       navigate('/polls')
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Registration failed')
+      setError(err instanceof ApiError ? err.message : t('register.failed'))
     } finally {
       setBusy(false)
     }
@@ -33,12 +35,12 @@ export default function RegisterPage() {
       <form className="auth-card" onSubmit={onSubmit}>
         <div className="auth-brand">
           <div className="logo">P</div>
-          <h1>Create account</h1>
-          <div className="tagline">Run polls in seconds</div>
+          <h1>{t('register.heading')}</h1>
+          <div className="tagline">{t('register.tagline')}</div>
         </div>
         {error && <div className="error">{error}</div>}
         <div className="field">
-          <label htmlFor="email">Email</label>
+          <label htmlFor="email">{t('register.email')}</label>
           <input
             id="email"
             type="email"
@@ -49,18 +51,18 @@ export default function RegisterPage() {
           />
         </div>
         <div className="field">
-          <label htmlFor="display">Display name</label>
+          <label htmlFor="display">{t('register.display_name')}</label>
           <input
             id="display"
             type="text"
             autoComplete="nickname"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="Optional, shown on non-anonymous polls"
+            placeholder={t('register.display_name_hint')}
           />
         </div>
         <div className="field">
-          <label htmlFor="password">Password</label>
+          <label htmlFor="password">{t('register.password')}</label>
           <input
             id="password"
             type="password"
@@ -70,19 +72,19 @@ export default function RegisterPage() {
             required
             minLength={8}
           />
-          <div className="help">At least 8 characters.</div>
+          <div className="help">{t('register.password_hint')}</div>
         </div>
         <button type="submit" className="btn primary btn-block" disabled={busy}>
           {busy ? (
             <>
-              <span className="spinner" /> Creating account…
+              <span className="spinner" /> {t('register.submitting')}
             </>
           ) : (
-            'Sign up'
+            t('register.submit')
           )}
         </button>
         <p className="auth-footer">
-          Already have an account? <Link to="/login">Sign in</Link>
+          {t('register.already_have')} <Link to="/login">{t('register.sign_in')}</Link>
         </p>
       </form>
     </div>

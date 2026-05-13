@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
+import { useT } from '../i18n/LocaleContext'
 import { ApiError, type PollDetails } from '../api/types'
 
 export default function PollDetailPage() {
   const { pollId = '' } = useParams<{ pollId: string }>()
+  const { t, tn } = useT()
   const navigate = useNavigate()
   const [poll, setPoll] = useState<PollDetails | null>(null)
   const [loading, setLoading] = useState(true)
@@ -25,9 +27,9 @@ export default function PollDetailPage() {
     api
       .getPoll(pollId)
       .then(setPoll)
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'Failed to load poll'))
+      .catch((err) => setError(err instanceof ApiError ? err.message : t('poll_detail.failed_load')))
       .finally(() => setLoading(false))
-  }, [pollId])
+  }, [pollId, t])
 
   function toggleOption(id: string) {
     if (!poll) return
@@ -53,7 +55,7 @@ export default function PollDetailPage() {
       await api.vote(poll.id, payload)
       navigate(`/polls/${poll.id}/results`)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to submit vote')
+      setError(err instanceof ApiError ? err.message : t('poll_detail.failed_vote'))
     } finally {
       setBusy(false)
     }
@@ -65,19 +67,19 @@ export default function PollDetailPage() {
     setReportNotice(null)
     try {
       await api.createReport(poll.id, reportReason, reportComment || undefined)
-      setReportNotice('Report submitted. An admin will review it.')
+      setReportNotice(t('poll_detail.report_submitted'))
       setReportReason('')
       setReportComment('')
       setReportOpen(false)
     } catch (err) {
-      setReportError(err instanceof ApiError ? err.message : 'Failed to submit report')
+      setReportError(err instanceof ApiError ? err.message : t('poll_detail.failed_report'))
     }
   }
 
   if (loading)
     return (
       <p className="muted">
-        <span className="spinner" /> Loading poll…
+        <span className="spinner" /> {t('common.loading')}
       </p>
     )
   if (error && !poll) return <div className="error">{error}</div>
@@ -92,17 +94,21 @@ export default function PollDetailPage() {
   return (
     <section>
       <Link to="/polls" className="back-link">
-        ← All polls
+        {t('poll_detail.back')}
       </Link>
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
           <div>
             <h2 style={{ margin: 0 }}>{poll.title}</h2>
             <div style={{ marginTop: '0.5rem' }}>
-              <span className={`tag ${poll.status}`}>{poll.status}</span>
-              {poll.is_anonymous && <span className="tag">anonymous</span>}
-              {poll.is_multiple_choice && <span className="tag">multi · max {poll.max_choices}</span>}
-              {poll.allow_custom_answer && <span className="tag">free text</span>}
+              <span className={`tag ${poll.status}`}>{t(`status.${poll.status}`)}</span>
+              {poll.is_anonymous && <span className="tag">{t('poll_detail.tag_anonymous')}</span>}
+              {poll.is_multiple_choice && (
+                <span className="tag">
+                  {t('poll_detail.tag_multi_max', { count: poll.max_choices ?? 0 })}
+                </span>
+              )}
+              {poll.allow_custom_answer && <span className="tag">{t('poll_detail.tag_free')}</span>}
             </div>
           </div>
         </div>
@@ -114,15 +120,12 @@ export default function PollDetailPage() {
         </p>
 
         <div className="stat-row">
+          <span>{tn('pluralize.participant', poll.participation_summary.participants_count)}</span>
           <span>
-            <strong>{poll.participation_summary.participants_count}</strong>{' '}
-            {poll.participation_summary.participants_count === 1 ? 'participant' : 'participants'}
+            <strong>{t('poll_detail.starts')}</strong> {new Date(poll.start_at).toLocaleString()}
           </span>
           <span>
-            <strong>Starts</strong> {new Date(poll.start_at).toLocaleString()}
-          </span>
-          <span>
-            <strong>Ends</strong> {new Date(poll.end_at).toLocaleString()}
+            <strong>{t('poll_detail.ends')}</strong> {new Date(poll.end_at).toLocaleString()}
           </span>
         </div>
 
@@ -137,17 +140,17 @@ export default function PollDetailPage() {
           </div>
         )}
 
-        <h3>Cast your vote</h3>
+        <h3>{t('poll_detail.cast_vote')}</h3>
 
         {poll.allow_custom_answer ? (
           <div className="field">
-            <label htmlFor="answer">Your answer</label>
+            <label htmlFor="answer">{t('poll_detail.your_answer')}</label>
             <textarea
               id="answer"
               value={customText}
               onChange={(e) => setCustomText(e.target.value)}
               disabled={!canVote}
-              placeholder={canVote ? 'Type your answer…' : 'Voting unavailable'}
+              placeholder={canVote ? t('poll_detail.answer_placeholder') : t('poll_detail.voting_unavailable')}
             />
           </div>
         ) : (
@@ -163,7 +166,7 @@ export default function PollDetailPage() {
                   onClick={() => toggleOption(opt.id)}
                 >
                   <span>{opt.text}</span>
-                  {selected ? <span className="tag active">selected</span> : null}
+                  {selected ? <span className="tag active">{t('poll_detail.selected')}</span> : null}
                 </button>
               )
             })}
@@ -173,44 +176,44 @@ export default function PollDetailPage() {
         <div className="toolbar">
           <button className="btn primary" onClick={submitVote} disabled={submitDisabled}>
             {poll.participation_summary.has_voted
-              ? 'Already voted'
+              ? t('poll_detail.already_voted')
               : busy
-              ? 'Submitting…'
-              : 'Submit vote'}
+              ? t('poll_detail.submitting')
+              : t('poll_detail.submit_vote')}
           </button>
           <Link className="btn" to={`/polls/${poll.id}/results`}>
-            View results
+            {t('poll_detail.view_results')}
           </Link>
           <button className="btn ghost" onClick={() => setReportOpen((v) => !v)}>
-            {reportOpen ? 'Cancel report' : 'Report poll'}
+            {reportOpen ? t('poll_detail.cancel_report') : t('poll_detail.report_poll')}
           </button>
         </div>
 
         {reportOpen && (
           <div style={{ marginTop: '1.25rem', borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
-            <h3 style={{ margin: '0 0 0.75rem' }}>Submit a report</h3>
+            <h3 style={{ margin: '0 0 0.75rem' }}>{t('poll_detail.report_heading')}</h3>
             {reportError && <div className="error">{reportError}</div>}
             <div className="field">
-              <label htmlFor="reason">Reason</label>
+              <label htmlFor="reason">{t('poll_detail.report_reason')}</label>
               <input
                 id="reason"
                 value={reportReason}
                 onChange={(e) => setReportReason(e.target.value)}
-                placeholder="What's wrong with this poll?"
+                placeholder={t('poll_detail.report_reason_placeholder')}
                 required
               />
             </div>
             <div className="field">
-              <label htmlFor="comment">Comment (optional)</label>
+              <label htmlFor="comment">{t('poll_detail.report_comment')}</label>
               <textarea
                 id="comment"
                 value={reportComment}
                 onChange={(e) => setReportComment(e.target.value)}
-                placeholder="Anything else admins should know?"
+                placeholder={t('poll_detail.report_comment_placeholder')}
               />
             </div>
             <button className="btn danger" onClick={submitReport} disabled={!reportReason.trim()}>
-              Send report
+              {t('poll_detail.report_send')}
             </button>
           </div>
         )}

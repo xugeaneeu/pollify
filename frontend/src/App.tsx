@@ -1,5 +1,6 @@
 import { Navigate, NavLink, Outlet, Route, Routes, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth/AuthContext'
+import { useT, type Locale } from './i18n/LocaleContext'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import PollListPage from './pages/PollListPage'
@@ -14,8 +15,31 @@ function userInitial(label: string | null | undefined, fallback: string): string
   return v.charAt(0).toUpperCase()
 }
 
+function LanguageSwitcher() {
+  const { locale, setLocale } = useT()
+  const options: Array<{ value: Locale; label: string }> = [
+    { value: 'en', label: 'EN' },
+    { value: 'ru', label: 'RU' },
+  ]
+  return (
+    <div className="lang-switcher" role="group" aria-label="Language">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          className={locale === o.value ? 'active' : ''}
+          onClick={() => setLocale(o.value)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function Shell() {
   const { user, logout } = useAuth()
+  const { t } = useT()
   const navigate = useNavigate()
   return (
     <div className="app-shell">
@@ -26,18 +50,19 @@ function Shell() {
         </div>
         <nav>
           <NavLink to="/polls" className={({ isActive }) => (isActive ? 'active' : '')}>
-            Polls
+            {t('nav.polls')}
           </NavLink>
           <NavLink to="/polls/new" className={({ isActive }) => (isActive ? 'active' : '')}>
-            New poll
+            {t('nav.new_poll')}
           </NavLink>
           {user?.role === 'ADMIN' && (
             <NavLink to="/moderation" className={({ isActive }) => (isActive ? 'active' : '')}>
-              Moderation
+              {t('nav.moderation')}
             </NavLink>
           )}
         </nav>
         <div className="user-chip">
+          <LanguageSwitcher />
           {user ? (
             <>
               <span className="name">
@@ -52,7 +77,7 @@ function Shell() {
                   navigate('/login')
                 }}
               >
-                Sign out
+                {t('nav.sign_out')}
               </button>
             </>
           ) : null}
@@ -67,10 +92,11 @@ function Shell() {
 
 function RequireAuth() {
   const { user, loading } = useAuth()
+  const { t } = useT()
   if (loading)
     return (
       <p className="muted" style={{ padding: '2rem 1.5rem' }}>
-        <span className="spinner" /> Loading…
+        <span className="spinner" /> {t('common.loading')}
       </p>
     )
   if (!user) return <Navigate to="/login" replace />
@@ -79,10 +105,11 @@ function RequireAuth() {
 
 function RequireAdmin() {
   const { user, loading } = useAuth()
+  const { t } = useT()
   if (loading)
     return (
       <p className="muted">
-        <span className="spinner" /> Loading…
+        <span className="spinner" /> {t('common.loading')}
       </p>
     )
   if (!user) return <Navigate to="/login" replace />
@@ -90,12 +117,25 @@ function RequireAdmin() {
   return <Outlet />
 }
 
+function AuthShell() {
+  return (
+    <>
+      <div className="auth-lang-corner">
+        <LanguageSwitcher />
+      </div>
+      <Outlet />
+    </>
+  )
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+        <Route element={<AuthShell />}>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+        </Route>
         <Route element={<RequireAuth />}>
           <Route index element={<Navigate to="/polls" replace />} />
           <Route path="/polls" element={<PollListPage />} />

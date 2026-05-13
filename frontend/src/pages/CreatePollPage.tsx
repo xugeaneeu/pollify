@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
+import { useT } from '../i18n/LocaleContext'
 import { ApiError } from '../api/types'
 
 function defaultStart() {
@@ -17,6 +18,7 @@ function defaultEnd() {
 }
 
 export default function CreatePollPage() {
+  const { t } = useT()
   const navigate = useNavigate()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -58,7 +60,7 @@ export default function CreatePollPage() {
       const created = await api.createPoll(payload)
       navigate(`/polls/${created.id}`)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to create poll')
+      setError(err instanceof ApiError ? err.message : t('create_poll.failed'))
     } finally {
       setBusy(false)
     }
@@ -66,24 +68,24 @@ export default function CreatePollPage() {
 
   return (
     <section>
-      <h2>Create poll</h2>
+      <h2>{t('create_poll.heading')}</h2>
       <form className="card" onSubmit={onSubmit}>
         {error && <div className="error">{error}</div>}
         <div className="field">
-          <label htmlFor="title">Title</label>
+          <label htmlFor="title">{t('create_poll.title')}</label>
           <input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required />
         </div>
         <div className="field">
-          <label htmlFor="description">Description (optional)</label>
+          <label htmlFor="description">{t('create_poll.description')}</label>
           <textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
         <div className="field">
-          <label htmlFor="question">Question</label>
+          <label htmlFor="question">{t('create_poll.question')}</label>
           <input id="question" value={question} onChange={(e) => setQuestion(e.target.value)} required />
         </div>
         <div className="checkbox-row">
           <input id="anon" type="checkbox" checked={isAnonymous} onChange={(e) => setIsAnonymous(e.target.checked)} />
-          <label htmlFor="anon">Anonymous voting</label>
+          <label htmlFor="anon">{t('create_poll.anonymous')}</label>
         </div>
         <div className="checkbox-row">
           <input
@@ -96,7 +98,7 @@ export default function CreatePollPage() {
               if (v) setIsMultiple(false)
             }}
           />
-          <label htmlFor="custom">Free-text answers (no fixed options)</label>
+          <label htmlFor="custom">{t('create_poll.free_text')}</label>
         </div>
         <div className="checkbox-row">
           <input
@@ -106,11 +108,11 @@ export default function CreatePollPage() {
             disabled={allowCustom}
             onChange={(e) => setIsMultiple(e.target.checked)}
           />
-          <label htmlFor="multi">Multiple choice</label>
+          <label htmlFor="multi">{t('create_poll.multiple_choice')}</label>
         </div>
         {isMultiple && (
           <div className="field">
-            <label htmlFor="max">Max choices (≥ 2)</label>
+            <label htmlFor="max">{t('create_poll.max_choices')}</label>
             <input
               id="max"
               type="number"
@@ -122,29 +124,29 @@ export default function CreatePollPage() {
         )}
         {!allowCustom && (
           <div className="field">
-            <label htmlFor="options">Options (one per line)</label>
+            <label htmlFor="options">{t('create_poll.options')}</label>
             <textarea
               id="options"
               rows={5}
               value={optionsText}
               onChange={(e) => setOptionsText(e.target.value)}
-              placeholder={'Pizza\nSushi\nBurgers'}
+              placeholder={t('create_poll.options_placeholder')}
               required
             />
           </div>
         )}
         <div className="row">
           <div className="field">
-            <label htmlFor="start">Starts</label>
+            <label htmlFor="start">{t('create_poll.starts')}</label>
             <input id="start" type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)} required />
           </div>
           <div className="field">
-            <label htmlFor="end">Ends</label>
+            <label htmlFor="end">{t('create_poll.ends')}</label>
             <input id="end" type="datetime-local" value={endAt} onChange={(e) => setEndAt(e.target.value)} required />
           </div>
         </div>
         <button type="submit" className="btn primary" disabled={busy}>
-          {busy ? 'Creating…' : 'Create poll'}
+          {busy ? t('create_poll.submitting') : t('create_poll.submit')}
         </button>
       </form>
     </section>
