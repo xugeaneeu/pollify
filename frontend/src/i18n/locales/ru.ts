@@ -73,7 +73,7 @@ const ru: Dict = {
     tagline: 'Запустите опрос за минуту',
     email: 'Email',
     display_name: 'Имя для показа',
-    display_name_hint: 'Опционально, видно в неанонимных опросах',
+    display_name_hint: 'Опционально',
     password: 'Пароль',
     password_hint: 'Минимум 8 символов.',
     submit: 'Зарегистрироваться',

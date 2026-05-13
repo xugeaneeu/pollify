@@ -70,7 +70,7 @@ const en = {
     tagline: 'Run polls in seconds',
     email: 'Email',
     display_name: 'Display name',
-    display_name_hint: 'Optional, shown on non-anonymous polls',
+    display_name_hint: 'Optional',
     password: 'Password',
     password_hint: 'At least 8 characters.',
     submit: 'Sign up',
