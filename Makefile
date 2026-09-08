@@ -87,8 +87,32 @@ shell-api:
 
 # ── dev-only stack (api + postgres without Caddy) ────────────────────
 
+DEV_API_BASE := http://127.0.0.1:8080
+
 dev-up:
 	$(DEV_COMPOSE) up -d --build
 
 dev-down:
 	$(DEV_COMPOSE) down
+
+dev-seed-admins:
+	@printf "→ waiting for dev api"
+	@for i in $$(seq 1 60); do \
+		if curl -fsS $(DEV_API_BASE)/healthz >/dev/null 2>&1; then echo " ready"; break; fi; \
+		printf "."; sleep 1; \
+	done
+	@echo "→ registering admin1..3 via /api/v1/auth/register"
+	@for i in 1 2 3; do \
+		curl -sS -o /dev/null -w "  admin$$i@gmail.com → %{http_code}\n" \
+			-X POST $(DEV_API_BASE)/api/v1/auth/register \
+			-H "Content-Type: application/json" \
+			-d "{\"email\":\"admin$$i@gmail.com\",\"password\":\"$(ADMIN_PW)\",\"display_name\":\"Admin $$i\"}" || true; \
+	done
+	@echo "→ promoting admin1..3 to ADMIN"
+	@$(DEV_COMPOSE) exec -T postgres psql -U pollify -d pollify -q \
+		-c "UPDATE users SET role='ADMIN' WHERE email IN ('admin1@gmail.com','admin2@gmail.com','admin3@gmail.com');"
+	@echo ""
+	@echo "✓ admin accounts ready:"
+	@echo "  admin1@gmail.com / $(ADMIN_PW)"
+	@echo "  admin2@gmail.com / $(ADMIN_PW)"
+	@echo "  admin3@gmail.com / $(ADMIN_PW)"
